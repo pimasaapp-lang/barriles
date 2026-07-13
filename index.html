@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Control de Barriles · Pimasa</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Inter:ital@1&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --graphite-950:#12161a;
@@ -257,7 +257,14 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <div class="login-wrap"><p style="color:#8b959c;">Cargando…</p></div>
+</div>
+
+<!-- Firebase se carga aquí (al final del body) para no bloquear el primer pintado -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
 /* ============================= FIREBASE ============================= */
@@ -273,6 +280,11 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// Caché local: en la siguiente visita, la app puede pintar datos al instante
+// desde el propio dispositivo mientras se sincroniza con el servidor de fondo.
+db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
+  console.warn('Persistencia offline no disponible:', err.code);
+});
 const auth = firebase.auth();
 
 // Las colecciones de Firestore, una por tipo de parte.
@@ -811,7 +823,30 @@ function buildSheetForType(typeKey){
   return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function exportExcel(which){
+let xlsxLoadingPromise = null;
+function ensureXLSXLoaded(){
+  if(window.XLSX) return Promise.resolve();
+  if(xlsxLoadingPromise) return xlsxLoadingPromise;
+  xlsxLoadingPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = ()=>resolve();
+    s.onerror = ()=>{ xlsxLoadingPromise=null; reject(new Error('No se pudo cargar la librería de Excel')); };
+    document.head.appendChild(s);
+  });
+  return xlsxLoadingPromise;
+}
+
+async function exportExcel(which, btnEl){
+  const originalLabel = btnEl ? btnEl.textContent : null;
+  if(btnEl){ btnEl.textContent = 'Preparando…'; btnEl.disabled = true; }
+  try{
+    await ensureXLSXLoaded();
+  }catch(e){
+    alert('No se ha podido cargar el generador de Excel. Comprueba tu conexión e inténtalo de nuevo.');
+    if(btnEl){ btnEl.textContent = originalLabel; btnEl.disabled = false; }
+    return;
+  }
   const wb = XLSX.utils.book_new();
   if(which==='all'){
     Object.values(TYPES).forEach(conf=>{
@@ -822,6 +857,7 @@ function exportExcel(which){
   }
   const fname = which==='all' ? 'control-barriles-completo.xlsx' : `control-barriles-${which}.xlsx`;
   XLSX.writeFile(wb, fname);
+  if(btnEl){ btnEl.textContent = originalLabel; btnEl.disabled = false; }
 }
 
 /* ============================= HANDLERS ============================= */
@@ -863,7 +899,7 @@ function attachGlobalHandlers(){
   });
 
   document.querySelectorAll('[data-export]').forEach(el=>{
-    el.onclick = ()=> exportExcel(el.getAttribute('data-export'));
+    el.onclick = ()=> exportExcel(el.getAttribute('data-export'), el);
   });
 
   if(STATE.view==='editor'){
