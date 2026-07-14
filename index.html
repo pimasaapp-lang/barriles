@@ -334,8 +334,8 @@ const TYPES = {
          concepts: REP1_CONCEPTS, hasCode:false,
          header:['fecha','codigo','descripcion','ubicacion','palets','barriles'], totalRows:REP1_TOTAL_ROWS},
   rep2: {key:'rep2', storageKey:'rep2-partes', label:'2ª Reparación (Enderezado)', short:'Reparación 2', step:'03',
-         concepts: REP2_CONCEPTS, hasCode:false,
-         header:['fecha','codigo','descripcion','ubicacion','palets','barriles'], totalRows:REP2_TOTAL_ROWS},
+         concepts: REP2_CONCEPTS, hasCode:false, totalAtEnd:true,
+         header:['fecha','codigo','descripcion','ubicacion','palets','barriles'], totalRows:REP2_CONCEPTS},
 };
 
 const FIELD_LABELS = {fecha:'Fecha', palets:'Nº Palets', barriles:'Nº Barriles', codigo:'Código',
@@ -720,8 +720,8 @@ function renderEditor(typeKey, parteId){
     </tr>`;
 
   // La fila TOTAL se inserta justo debajo del último concepto que suma
-  // (conf.totalRows), no necesariamente al final de la tabla.
-  const insertAt = (conf.totalRows || conf.concepts).length;
+  // (conf.totalRows), salvo que el tipo pida explícitamente que vaya al final.
+  const insertAt = conf.totalAtEnd ? conf.concepts.length : (conf.totalRows || conf.concepts).length;
   const bodyRows = bodyRowsArr.slice(0, insertAt).join('') + totalRowHtml + bodyRowsArr.slice(insertAt).join('');
 
   const colHeads = p.cols.map(col=>`
@@ -821,8 +821,8 @@ function buildSheetForType(typeKey){
     totalRow.push(parteGrandTotal(typeKey, p));
 
     // El TOTAL se inserta justo debajo del último concepto que suma (conf.totalRows),
-    // igual que en la tabla en vivo de la app.
-    const insertAt = (conf.totalRows || conf.concepts).length;
+    // igual que en la tabla en vivo de la app (salvo que el tipo pida ir al final).
+    const insertAt = conf.totalAtEnd ? conf.concepts.length : (conf.totalRows || conf.concepts).length;
     conceptRows.slice(0, insertAt).forEach(r=> rows.push(r));
     rows.push(totalRow);
     conceptRows.slice(insertAt).forEach(r=> rows.push(r));
