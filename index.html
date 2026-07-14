@@ -329,7 +329,7 @@ const REP2_TOTAL_ROWS = ["Cambio espadín reparado Grundy","Cambio espadín nuev
 const TYPES = {
   rev1: {key:'rev1', storageKey:'rev1-partes', label:'1ª Revisión', short:'Revisión', step:'01',
          concepts: REV1_CONCEPTS.map(c=>c.name), hasCode:true, codeMap: REV1_CONCEPTS,
-         header:['fecha','palets','barriles'], totalRows:null},
+         header:['fecha','palets','barriles'], totalRows:REV1_CONCEPTS.map(c=>c.name)},
   rep1: {key:'rep1', storageKey:'rep1-partes', label:'1ª Reparación', short:'Reparación 1', step:'02',
          concepts: REP1_CONCEPTS, hasCode:false,
          header:['fecha','codigo','descripcion','ubicacion','palets','barriles'], totalRows:REP1_TOTAL_ROWS},
@@ -696,9 +696,7 @@ function renderEditor(typeKey, parteId){
       </div>`;
   }).join('');
 
-  const totalRows = conf.totalRows;
-
-  const bodyRows = conf.concepts.map((concept, idx)=>{
+  const bodyRowsArr = conf.concepts.map((concept, idx)=>{
     const code = conf.hasCode ? conf.codeMap[idx].code : null;
     const cells = p.cols.map(col=>`
       <td class="val-cell"><input type="number" inputmode="numeric" data-cell="${concept}|${col.id}"
@@ -711,14 +709,20 @@ function renderEditor(typeKey, parteId){
         ${cells}
         <td class="total-cell">${rowTotal(p, concept)}</td>
       </tr>`;
-  }).join('');
+  });
 
-  const totalRow = totalRows ? `
+  const totalRowHtml = `
     <tr class="total-row">
       <td class="concept-cell">TOTAL</td>
-      ${p.cols.map(col=>`<td>${colTotal(p, col.id, totalRows)}</td>`).join('')}
+      ${conf.hasCode? '<td class="code-cell"></td>' : ''}
+      ${p.cols.map(col=>`<td>${colTotal(p, col.id, conf.totalRows)}</td>`).join('')}
       <td>${parteGrandTotal(typeKey, p)}</td>
-    </tr>` : '';
+    </tr>`;
+
+  // La fila TOTAL se inserta justo debajo del último concepto que suma
+  // (conf.totalRows), no necesariamente al final de la tabla.
+  const insertAt = (conf.totalRows || conf.concepts).length;
+  const bodyRows = bodyRowsArr.slice(0, insertAt).join('') + totalRowHtml + bodyRowsArr.slice(insertAt).join('');
 
   const colHeads = p.cols.map(col=>`
     <th>
@@ -747,7 +751,7 @@ function renderEditor(typeKey, parteId){
           ${colHeads}
           <th>Total</th>
         </tr></thead>
-        <tbody>${bodyRows}${totalRow}</tbody>
+        <tbody>${bodyRows}</tbody>
       </table>
     </div>
 
@@ -975,21 +979,22 @@ function markSaving(){
 function updateTotalsInPlace(typeKey, p){
   // Recompute only the total cells without a full re-render (keeps focus in the active input)
   const conf = TYPES[typeKey];
-  document.querySelectorAll('table.parte-table tbody tr').forEach((tr, idx)=>{
-    if(idx < conf.concepts.length){
-      const concept = conf.concepts[idx];
+  let conceptIdx = 0;
+  document.querySelectorAll('table.parte-table tbody tr').forEach(tr=>{
+    if(tr.classList.contains('total-row')){
+      const tds = tr.querySelectorAll('td');
+      const offset = conf.hasCode ? 2 : 1; // 'TOTAL' label (+ código en blanco si aplica)
+      p.cols.forEach((col,i)=>{ if(tds[i+offset]) tds[i+offset].textContent = colTotal(p, col.id, conf.totalRows); });
+      if(tds[tds.length-1]) tds[tds.length-1].textContent = parteGrandTotal(typeKey, p);
+      return;
+    }
+    if(conceptIdx < conf.concepts.length){
+      const concept = conf.concepts[conceptIdx];
       const totalCell = tr.querySelector('.total-cell');
       if(totalCell) totalCell.textContent = rowTotal(p, concept);
+      conceptIdx++;
     }
   });
-  if(conf.totalRows){
-    const totalRowEl = document.querySelector('tr.total-row');
-    if(totalRowEl){
-      const tds = totalRowEl.querySelectorAll('td');
-      p.cols.forEach((col,i)=>{ if(tds[i+1]) tds[i+1].textContent = colTotal(p, col.id, conf.totalRows); });
-      if(tds[tds.length-1]) tds[tds.length-1].textContent = parteGrandTotal(typeKey, p);
-    }
-  }
 }
 
 /* ============================= INIT ============================= */
