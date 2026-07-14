@@ -808,19 +808,25 @@ function buildSheetForType(typeKey){
     p.cols.forEach(c=>head.push(fmtDate(c.fecha)));
     head.push('Total');
     rows.push(head);
-    conf.concepts.forEach((concept, idx)=>{
+    const conceptRows = conf.concepts.map((concept, idx)=>{
       const r = [concept];
       if(conf.hasCode) r.push(conf.codeMap[idx].code);
       p.cols.forEach(col=> r.push(num(p.values[concept] && p.values[concept][col.id])));
       r.push(rowTotal(p, concept));
-      rows.push(r);
+      return r;
     });
-    if(conf.totalRows){
-      const r = ['TOTAL']; if(conf.hasCode) r.push('');
-      p.cols.forEach(col=> r.push(colTotal(p, col.id, conf.totalRows)));
-      r.push(parteGrandTotal(typeKey, p));
-      rows.push(r);
-    }
+    const totalRow = ['TOTAL'];
+    if(conf.hasCode) totalRow.push('');
+    p.cols.forEach(col=> totalRow.push(colTotal(p, col.id, conf.totalRows)));
+    totalRow.push(parteGrandTotal(typeKey, p));
+
+    // El TOTAL se inserta justo debajo del último concepto que suma (conf.totalRows),
+    // igual que en la tabla en vivo de la app.
+    const insertAt = (conf.totalRows || conf.concepts).length;
+    conceptRows.slice(0, insertAt).forEach(r=> rows.push(r));
+    rows.push(totalRow);
+    conceptRows.slice(insertAt).forEach(r=> rows.push(r));
+
     rows.push([]); rows.push([]);
   });
   if(rows.length===0) rows.push(['Sin partes registrados todavía.']);
